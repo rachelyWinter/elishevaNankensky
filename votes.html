@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Election segmentation</title>
+</head>
+
+<body>
+    <div style="border: 3px solid aquamarine; padding: 5rem; direction: rtl; width: auto;">
+        <h2>פילוח בחירות לפי עיר</h2>
+        <label>בחר עיר:</label>
+        <div id="cities" style="margin: 10px;"></div>
+        <div id="votesDiv"></div>
+    </div>
+    <script>
+        let cities = document.getElementById("cities");
+        let selectCities = document.createElement("select");
+        fetch("https://data.gov.il/api/3/action/datastore_search?resource_id=5c78e9fa-c2e2-4771-93ff-7f400a12f7ba&q=&limit=32000")
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                setCities(data);
+            })
+            .catch(error => {
+                console.log(error);
+                cities.innerHTML = "an error oqured: " + error;
+            })
+        function setCities(data) {
+            let citiesList = data.result.records;
+            citiesList.map(city => {
+                let cityOption = document.createElement("option");
+                cityOption.innerHTML = city.שם_ישוב;
+                selectCities.appendChild(cityOption);
+            })
+            selectCities.addEventListener("change", cityVotes)
+            cities.appendChild(selectCities);
+        }
+        function cityVotes() {
+            let votesDiv = document.getElementById("votesDiv");
+            votesDiv.innerHTML = ""
+
+            let results = document.createElement("h4")
+            results.innerHTML = "פילוח בחירות על פי עיר"
+            votesDiv.appendChild(results)
+            let cityName = event.target.value;
+
+            let now = new Date();
+            let today = ""+now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate();
+            let dayInCache = window.localStorage.getItem("today");
+            if (!today || today != dayInCache) {
+                window.localStorage.clear()
+                window.localStorage.setItem("today", today);
+            } else {
+                let resultFromCache = window.localStorage.getItem(cityName);
+                if (resultFromCache) {
+                    console.log("from cache")
+                    setVotesInfo(JSON.parse(resultFromCache));
+                    return;
+                }
+            }
+
+            let url = "https://data.gov.il/api/3/action/datastore_search?resource_id=929b50c6-f455-4be2-b438-ec6af01421f2&q=%7B%22%D7%A9%D7%9D+%D7%99%D7%A9%D7%95%D7%91%22:%22" + cityName + "%22%7D&limit=32000";
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    setVotesInfo(data);
+                    saveInCache(cityName, data);
+                })
+                .catch(error => {
+                    console.log(error);
+                    cities.innerHTML = "Service error";
+                })
+        }
+        function setVotesInfo(data) {
+            let votesDiv = document.getElementById("votesDiv");
+            let canvas = document.createElement("canvas");
+            canvas.setAttribute("style", "width:100%;max-width:700px");
+            canvas.setAttribute("id", "electionChart");
+            votesDiv.appendChild(canvas);
+            try {
+                let result = Object.entries(data.result.records["0"]);
+                result = result.slice(7, result.length - 1).filter(x => x[1] > 10).sort((a, b) => b[1] - a[1]).slice(0, 7);
+                var highVotes = Object.fromEntries(result);
+                new Chart("electionChart", {
+                    type: "bar",
+                    data: {
+                        labels: Object.keys(highVotes),
+                        datasets: [{
+                            data: Object.values(highVotes)
+                        }]
+                    },
+                    options: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: "7 המפלגות הגבוהות ביותר"
+                        }
+                    }
+                });
+            }
+            catch (error) {
+                votesDiv.innerHTML = "אין תוצאות לישוב זה"
+                console.log("an error oqured: " + error)
+            }
+        }
+        function getFromCache(city) {
+            return window.localStorage.getItem(city)
+        }
+        function saveInCache(city, data) {
+            window.localStorage.setItem(city, JSON.stringify(data))
+        }
+    </script>
+</body>
+
+</html>
